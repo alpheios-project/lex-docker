@@ -1,0 +1,15 @@
+version: '2'
+
+services:
+  varnish:
+    build: varnish
+    ports:
+      - 8088:80
+    depends_on:
+      - exist
+    links:
+      - exist
+  exist:
+    build: .
+    
+
