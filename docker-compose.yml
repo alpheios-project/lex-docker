@@ -1,15 +1,21 @@
-version: '2'
+version: '3'
 
 services:
   varnish:
-    build: varnish
+    build: 
+      context: "./varnish"
+      args:
+        - cachesize=1G
     ports:
       - 8088:80
-    depends_on:
-      - exist
-    links:
-      - exist
+    networks: 
+      - local
   exist:
     build: .
-    
+    ports:
+      - 8080:8080
+    networks: 
+      - local
+networks:
+  local:    
 

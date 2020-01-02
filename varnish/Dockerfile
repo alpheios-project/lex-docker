@@ -1,4 +1,7 @@
 FROM varnish:6.2
+ARG cachesize
 
 COPY default.vcl /etc/varnish/
+RUN sed -i -r "s/malloc,256m/malloc,${cachesize}/g" /lib/systemd/system/varnish.service
+
 
