@@ -1,4 +1,4 @@
-version: '3'
+version: '3.6'
 
 services:
   varnish:
@@ -10,12 +10,14 @@ services:
       - 8088:80
     networks: 
       - local
-  exist:
+  existdb:
     build: .
     ports:
       - 8080:8080
     networks: 
       - local
+    restart: unless-stopped
 networks:
-  local:    
+  local: 
+     
 

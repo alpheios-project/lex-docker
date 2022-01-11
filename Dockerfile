@@ -1,36 +1,54 @@
-FROM openjdk:7u131-jdk
-MAINTAINER Alpheios Project
+FROM openjdk:8-jre-slim
 
-RUN echo "deb [check-valid-until=no] http://cdn-fastly.deb.debian.org/debian jessie main" > /etc/apt/sources.list.d/jessie.list
-RUN echo "deb [check-valid-until=no] http://archive.debian.org/debian jessie-backports main" > /etc/apt/sources.list.d/jessie-backports.list
-RUN sed -i '/deb http:\/\/deb.debian.org\/debian jessie-updates main/d' /etc/apt/sources.list
-RUN apt-get -o Acquire::Check-Valid-Until=false update
-
-RUN apt-get install -y curl expect cadaver
-
-WORKDIR /tmp
-RUN curl -LO http://downloads.sourceforge.net/exist/Stable/2.2/eXist-db-setup-2.2.jar
-RUN curl -L -o lexsvc.zip https://github.com/alpheios-project/lexsvc/archive/master.zip
-RUN curl -L -o ml.zip https://github.com/alpheios-project/ml/archive/master.zip
-
-# RUN curl -L -o as.zip https://github.com/alpheios-project/as/archive/master.zip
-# RUN curl -L -o aut.zip https://github.com/alpheios-project/aut/archive/master.zip
-# RUN curl -L -o dod.zip https://github.com/alpheios-project/dod/archive/master.zip
-# RUN curl -L -o lsj.zip https://github.com/alpheios-project/lsj/archive/master.zip
-# RUN curl -L -o ls.zip https://github.com/alpheios-project/ls/archive/master.zip
-# RUN curl -L -o ml.zip https://github.com/alpheios-project/ml/archive/master.zip
-# RUN curl -L -o sal.zip https://github.com/alpheios-project/sal/archive/master.zip
-# RUN curl -L -o lan.zip https://github.com/alpheios-project/lan/archive/master.zip
-ADD exist-setup.cmd /tmp/exist-setup.cmd
-RUN expect -f exist-setup.cmd
-RUN rm eXist-db-setup-2.2.jar exist-setup.cmd
-
-EXPOSE 8080 8443
+ENV VERSION ${VERSION:-5.3.1}
+ENV EXIST_URL ${EXIST_URL:-https://github.com/eXist-db/exist/releases/download/eXist-${VERSION}/exist-installer-${VERSION}.jar}
 ENV EXIST_HOME /opt/exist
-WORKDIR /opt/exist
-#ADD alpheios /tmp/alpheios
-ADD exist-startup.sh /tmp/exist-startup.sh
-RUN /tmp/exist-startup.sh
+ENV MAX_MEMORY ${MAX_MEMORY:-2048}
+ENV EXIST_ENV ${EXIST_ENV:-development}
+ENV EXIST_CONTEXT_PATH ${EXIST_CONTEXT_PATH:-/exist}
+ENV EXIST_DATA_DIR ${EXIST_DATA_DIR:-/opt/exist/data}
+ENV SAXON_JAR ${SAXON_JAR:-/opt/exist/lib/Saxon-HE-9.9.1-7.jar}
 
-CMD tools/wrapper/bin/exist.sh console
+WORKDIR ${EXIST_HOME}
 
+# adding expath packages to the autodeploy directory
+ADD http://exist-db.org/exist/apps/public-repo/public/functx-1.0.1.xar ${EXIST_HOME}/autodeploy/docker
+# adding the entrypoint script
+COPY entrypoint.sh ${EXIST_HOME}/
+
+# adding some scripts/configuration files for fine tuning
+COPY adjust-conf-files.xsl ${EXIST_HOME}/
+COPY log4j2.xml ${EXIST_HOME}/
+
+# main installation put into one RUN to squeeze image size
+RUN apt-get update \
+    && apt-get install -y curl zip expect cadaver mc \
+    && echo "INSTALL_PATH=${EXIST_HOME}" > "/tmp/options.txt" \
+    && echo "MAX_MEMORY=${MAX_MEMORY}" >> "/tmp/options.txt" \
+    && echo "dataDir=${EXIST_DATA_DIR}" >> "/tmp/options.txt" \
+    # install eXist-db
+    # ending with true because java somehow returns with a non-zero after succesfull installing
+    && curl -sL ${EXIST_URL} -o /tmp/exist.jar \
+    && java -jar "/tmp/exist.jar" -options "/tmp/options.txt" || true \
+    # remove JndiLookup class due to Log4Shell CVE-2021-44228 vulnerability
+    && find ${EXIST_HOME} -name log4j-core-*.jar -exec zip -q -d {} org/apache/logging/log4j/core/lookup/JndiLookup.class \;
+
+# download backups
+RUN curl -sL https://github.com/alpheios-project/lexsvc/archive/master.zip -o /tmp/lexsvc.zip \
+    && curl -sL https://github.com/alpheios-project/ml/archive/master.zip -o /tmp/ml.zip \
+    && curl -sL https://github.com/alpheios-project/as/archive/master.zip -o /tmp/as.zip \
+    && curl -sL https://github.com/alpheios-project/aut/archive/master.zip -o /tmp/aut.zip \
+    && curl -sL https://github.com/alpheios-project/dod/archive/master.zip -o /tmp/dod.zip \
+    && curl -sL https://github.com/alpheios-project/lsj/archive/master.zip -o /tmp/lsj.zip \
+    && curl -sL https://github.com/alpheios-project/ls/archive/master.zip -o /tmp/ls.zip \
+    && curl -sL https://github.com/alpheios-project/sal/archive/master.zip -o /tmp/sal.zip \
+    && curl -sL https://github.com/alpheios-project/lan/archive/master.zip -o /tmp/lan.zip 
+
+VOLUME ["${EXIST_DATA_DIR}"]
+
+HEALTHCHECK --interval=60s --timeout=5s \
+  CMD curl -Lf http://localhost:8080${EXIST_CONTEXT_PATH} || exit 1
+
+CMD ["./entrypoint.sh"]
+
+EXPOSE 8080
