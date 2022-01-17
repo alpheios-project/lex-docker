@@ -15,6 +15,8 @@ WORKDIR ${EXIST_HOME}
 ADD http://exist-db.org/exist/apps/public-repo/public/functx-1.0.1.xar ${EXIST_HOME}/autodeploy/docker
 # adding the entrypoint script
 COPY entrypoint.sh ${EXIST_HOME}/
+RUN chmod +x ${EXIST_HOME}/entrypoint.sh
+
 
 # adding some scripts/configuration files for fine tuning
 COPY adjust-conf-files.xsl ${EXIST_HOME}/
